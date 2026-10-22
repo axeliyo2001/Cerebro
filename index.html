@@ -1,1 +1,275 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Cerebro">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#edf1f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1318" media="(prefers-color-scheme: dark)">
+<title>Cerebro</title>
+<style>
+:root{
+  --bg:#edf1f5;--surface:#fbfcfd;--ink:#16202b;--muted:#5b6b7b;--line:#cdd6df;
+  --accent:#0b6e8a;--on-accent:#ffffff;--danger:#b42318;--ok:#17703a;
+  --serif:ui-serif,"New York",Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#0d1318;--surface:#141c23;--ink:#e6edf3;--muted:#8fa1b1;--line:#263440;
+        --accent:#4fb3d1;--on-accent:#06222c;--danger:#f97066;--ok:#4ade80}
+}
+[hidden]{display:none!important}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;color:var(--ink);font:16px/1.5 var(--sans);-webkit-text-size-adjust:100%;
+  padding:env(safe-area-inset-top) 18px calc(env(safe-area-inset-bottom) + 32px)}
+main{max-width:620px;margin:0 auto}
+header{display:flex;justify-content:space-between;align-items:center;padding:18px 0 8px}
+h1{font:600 30px/1.1 var(--serif);margin:0;letter-spacing:-.01em}
+button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:12px 18px;min-height:44px;
+  background:var(--accent);color:var(--on-accent)}
+button:disabled{opacity:.55}
+button.ghost{background:transparent;color:var(--muted);padding:8px 10px;min-height:36px;font-weight:500}
+button.danger{color:var(--danger)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+nav{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:8px 0 20px}
+.tab{background:transparent;color:var(--muted);border-radius:0;padding:10px 14px;font-weight:500;
+  border-bottom:2px solid transparent}
+.tab.active{color:var(--ink);border-bottom-color:var(--accent)}
+label{display:block;font-size:14px;color:var(--muted);margin:16px 0 6px}
+input,textarea{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--surface);
+  border:1px solid var(--line);border-radius:8px;padding:11px 12px}
+textarea{min-height:150px;resize:vertical}
+.row{display:flex;gap:10px;margin-top:18px}
+.row input{flex:1}
+.status{min-height:1.5em;margin:12px 0 0;font-size:15px;color:var(--muted)}
+.status.ok{color:var(--ok)}
+.status.err{color:var(--danger)}
+.mem{padding:18px 0;border-bottom:1px solid var(--line)}
+.mem h3{font:600 20px/1.25 var(--serif);margin:0 0 4px}
+.meta{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.mem p{margin:10px 0 6px;white-space:pre-wrap;overflow-wrap:anywhere}
+.sim{height:3px;background:var(--line);border-radius:2px;margin:12px 0 0;overflow:hidden}
+.sim i{display:block;height:100%;background:var(--accent)}
+.hint{color:var(--muted);font-size:14px;margin:6px 0 0}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Cerebro</h1>
+    <button id="logout" class="ghost" hidden>Salir</button>
+  </header>
 
+  <section id="auth" hidden>
+    <label for="email">Correo</label>
+    <input id="email" type="email" autocomplete="username" inputmode="email" autocapitalize="none">
+    <label for="password">Contraseña</label>
+    <input id="password" type="password" autocomplete="current-password">
+    <div class="row"><button id="login">Entrar</button></div>
+    <p id="auth-status" class="status" role="status"></p>
+  </section>
+
+  <section id="app" hidden>
+    <nav>
+      <button class="tab active" data-tab="save">Guardar</button>
+      <button class="tab" data-tab="search">Buscar</button>
+      <button class="tab" data-tab="recent">Recientes</button>
+    </nav>
+
+    <div id="tab-save">
+      <label for="title">Título</label>
+      <input id="title" type="text" maxlength="200">
+      <label for="content">Texto</label>
+      <textarea id="content" maxlength="8000"></textarea>
+      <p class="hint">La búsqueda por significado tiene en cuenta sobre todo el principio del texto. Mejor memorias cortas.</p>
+      <label for="category">Categoría</label>
+      <input id="category" type="text" maxlength="50" value="general">
+      <div class="row"><button id="save">Guardar memoria</button></div>
+      <p id="save-status" class="status" role="status"></p>
+    </div>
+
+    <div id="tab-search" hidden>
+      <label for="query">¿Qué quieres recordar?</label>
+      <div class="row">
+        <input id="query" type="search" maxlength="1000">
+        <button id="search">Buscar</button>
+      </div>
+      <p id="search-status" class="status" role="status"></p>
+      <div id="results"></div>
+    </div>
+
+    <div id="tab-recent" hidden>
+      <p id="recent-status" class="status" role="status"></p>
+      <div id="recent-list"></div>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.104.0/dist/umd/supabase.js"></script>
+<script>
+(function () {
+  // Datos públicos del proyecto: la dirección y la clave publicable.
+  // Tus memorias están protegidas por el inicio de sesión y RLS, no por ocultar estos datos.
+  var SUPABASE_URL = 'https://tuwsaboiqwvkfqyxdbqm.supabase.co';
+  var SUPABASE_KEY = 'sb_publishable_2FPUNjnPKVOXQH75CYb8DQ_KXTXBopd';
+
+  var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  var $ = function (id) { return document.getElementById(id); };
+  var logged = null;
+
+  function setStatus(id, text, kind) {
+    var n = $(id);
+    n.textContent = text || '';
+    n.className = 'status' + (kind ? ' ' + kind : '');
+  }
+
+  async function fnError(error) {
+    try {
+      if (error.context && error.context.json) {
+        var j = await error.context.json();
+        if (j && j.error) return j.error;
+      }
+    } catch (e) { /* se usa el mensaje genérico */ }
+    return error.message || 'Error desconocido';
+  }
+
+  function render(session) {
+    var now = !!session;
+    if (now === logged) return;
+    logged = now;
+    $('auth').hidden = now;
+    $('app').hidden = !now;
+    $('logout').hidden = !now;
+    if (now) loadRecent();
+  }
+
+  sb.auth.getSession().then(function (r) { render(r.data.session); });
+  sb.auth.onAuthStateChange(function (_event, session) { render(session); });
+
+  $('login').onclick = async function () {
+    var email = $('email').value.trim();
+    var password = $('password').value;
+    if (!email || !password) return setStatus('auth-status', 'Escribe tu correo y tu contraseña.', 'err');
+    $('login').disabled = true;
+    setStatus('auth-status', 'Entrando…');
+    var res = await sb.auth.signInWithPassword({ email: email, password: password });
+    $('login').disabled = false;
+    if (res.error) return setStatus('auth-status', 'No se pudo entrar. Revisa el correo y la contraseña.', 'err');
+    $('password').value = '';
+    setStatus('auth-status', '');
+  };
+  $('password').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('login').click(); });
+  $('logout').onclick = function () { sb.auth.signOut(); };
+
+  document.querySelectorAll('.tab').forEach(function (b) {
+    b.onclick = function () {
+      document.querySelectorAll('.tab').forEach(function (x) { x.classList.toggle('active', x === b); });
+      ['save', 'search', 'recent'].forEach(function (t) { $('tab-' + t).hidden = (t !== b.dataset.tab); });
+      if (b.dataset.tab === 'recent') loadRecent();
+    };
+  });
+
+  function card(m, similarity) {
+    var box = document.createElement('article');
+    box.className = 'mem';
+
+    var h = document.createElement('h3');
+    h.textContent = m.title;
+
+    var meta = document.createElement('div');
+    meta.className = 'meta';
+    var cat = document.createElement('span');
+    cat.textContent = m.category;
+    var date = document.createElement('span');
+    date.textContent = new Date(m.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+    meta.append(cat, date);
+    if (typeof similarity === 'number') {
+      var s = document.createElement('span');
+      s.textContent = Math.round(similarity * 100) + ' % de parecido';
+      meta.append(s);
+    }
+
+    var p = document.createElement('p');
+    p.textContent = m.content;
+
+    var del = document.createElement('button');
+    del.className = 'ghost danger';
+    del.textContent = 'Borrar';
+    del.onclick = async function () {
+      if (!confirm('¿Borrar esta memoria?')) return;
+      del.disabled = true;
+      var res = await sb.from('memories').delete().eq('id', m.id);
+      if (res.error) { del.disabled = false; alert('No se pudo borrar.'); return; }
+      box.remove();
+    };
+
+    box.append(h, meta, p);
+    if (typeof similarity === 'number') {
+      var bar = document.createElement('div');
+      bar.className = 'sim';
+      var fill = document.createElement('i');
+      fill.style.width = (Math.max(0, Math.min(1, similarity)) * 100) + '%';
+      bar.append(fill);
+      box.append(bar);
+    }
+    box.append(del);
+    return box;
+  }
+
+  $('save').onclick = async function () {
+    var title = $('title').value.trim();
+    var content = $('content').value.trim();
+    var category = $('category').value.trim() || 'general';
+    if (!title || !content) return setStatus('save-status', 'Escribe un título y un texto.', 'err');
+    $('save').disabled = true;
+    setStatus('save-status', 'Guardando… la primera vez puede tardar unos segundos.');
+    var res = await sb.functions.invoke('remember', { body: { title: title, content: content, category: category } });
+    $('save').disabled = false;
+    if (res.error) return setStatus('save-status', await fnError(res.error), 'err');
+    $('title').value = '';
+    $('content').value = '';
+    setStatus('save-status',
+      res.data && res.data.embedded
+        ? 'Guardada y lista para buscar por significado.'
+        : 'Guardada, pero todavía sin búsqueda por significado.',
+      'ok');
+  };
+
+  async function search() {
+    var query = $('query').value.trim();
+    if (!query) return setStatus('search-status', 'Escribe qué quieres buscar.', 'err');
+    $('search').disabled = true;
+    setStatus('search-status', 'Buscando… la primera vez puede tardar unos segundos.');
+    var res = await sb.functions.invoke('recall', { body: { query: query, limit: 8 } });
+    $('search').disabled = false;
+    if (res.error) return setStatus('search-status', await fnError(res.error), 'err');
+    var rows = (res.data && res.data.results) || [];
+    var list = $('results');
+    list.replaceChildren();
+    setStatus('search-status', rows.length ? '' : 'Sin resultados. Guarda alguna memoria primero.');
+    rows.forEach(function (r) { list.append(card(r, r.similarity)); });
+  }
+  $('search').onclick = search;
+  $('query').addEventListener('keydown', function (e) { if (e.key === 'Enter') search(); });
+
+  async function loadRecent() {
+    setStatus('recent-status', 'Cargando…');
+    var res = await sb.from('memories')
+      .select('id,title,content,category,created_at')
+      .order('created_at', { ascending: false })
+      .limit(20);
+    var list = $('recent-list');
+    list.replaceChildren();
+    if (res.error) return setStatus('recent-status', 'No se pudieron cargar las memorias.', 'err');
+    setStatus('recent-status', res.data.length ? '' : 'Aún no hay memorias. Guarda la primera en la pestaña Guardar.');
+    res.data.forEach(function (m) { list.append(card(m)); });
+  }
+})();
+</script>
+</body>
+</html>
