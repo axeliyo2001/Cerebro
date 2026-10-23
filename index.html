@@ -251,7 +251,7 @@ textarea{min-height:150px;resize:vertical}
     var rows = (res.data && res.data.results) || [];
     var list = $('results');
     list.replaceChildren();
-    setStatus('search-status', rows.length ? '' : 'Sin resultados. Guarda alguna memoria primero.');
+    setStatus('search-status', rows.length ? '' : 'Sin resultados. Nada relacionado en tu memoria.');
     rows.forEach(function (r) { list.append(card(r, r.similarity)); });
   }
   $('search').onclick = search;
