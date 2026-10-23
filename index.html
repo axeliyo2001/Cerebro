@@ -245,7 +245,7 @@ textarea{min-height:150px;resize:vertical}
     if (!query) return setStatus('search-status', 'Escribe qué quieres buscar.', 'err');
     $('search').disabled = true;
     setStatus('search-status', 'Buscando… la primera vez puede tardar unos segundos.');
-    var res = await sb.functions.invoke('recall', { body: { query: query, limit: 8 } });
+    var res = await sb.functions.invoke('recall', { body: { query: query, limit: 8 , min_similarity: 0.4 } });
     $('search').disabled = false;
     if (res.error) return setStatus('search-status', await fnError(res.error), 'err');
     var rows = (res.data && res.data.results) || [];
