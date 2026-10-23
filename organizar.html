@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Organizar">
+<meta name="theme-color" content="#edf1f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1318" media="(prefers-color-scheme: dark)">
+<title>Cerebro · Organizar</title>
+<style>
+:root{
+  --bg:#edf1f5;--surface:#fbfcfd;--ink:#162029;--muted:#5b6b7b;--line:#cdd6df;
+  --accent:#0b6e8a;--on-accent:#ffffff;--danger:#b42318;--ok:#17703a;
+  --serif:ui-serif,"New York",Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#0d1318;--surface:#141c23;--ink:#e6edf3;--muted:#8a9aa8;--line:#26323c;
+    --accent:#4fb3d1;--on-accent:#06222b;--danger:#f07167;--ok:#5cc48a}
+}
+[hidden]{display:none!important}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 var(--sans);
+  padding:env(safe-area-inset-top) 20px calc(40px + env(safe-area-inset-bottom))}
+main{max-width:640px;margin:0 auto}
+header{display:flex;justify-content:space-between;align-items:baseline;padding:28px 0 8px}
+h1{font:600 34px/1.1 var(--serif);margin:0}
+h3{font:600 20px/1.25 var(--serif);margin:0}
+a,button.ghost{color:var(--muted);font-size:15px;background:none;border:0;padding:6px 0;text-decoration:none}
+button{font:inherit;background:var(--accent);color:var(--on-accent);border:0;border-radius:12px;
+  padding:12px 18px;font-weight:600}
+button:disabled{opacity:.5}
+button.danger{background:none;color:var(--danger);padding:6px 0;font-weight:500;font-size:15px}
+nav{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:12px 0 4px}
+.tab{background:transparent;color:var(--muted);border-radius:0;border-bottom:2px solid transparent;padding:12px 14px}
+.tab.active{color:var(--ink);border-bottom-color:var(--accent)}
+label{display:block;font-size:14px;color:var(--muted);margin:14px 0 6px}
+input,textarea,select{width:100%;font:inherit;color:var(--ink);background:var(--surface);
+  border:1px solid var(--line);border-radius:12px;padding:12px}
+textarea{min-height:90px;resize:vertical}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.item{padding:16px 0;border-bottom:1px solid var(--line)}
+.meta{display:flex;gap:12px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:4px}
+.item p{margin:8px 0 0;white-space:pre-wrap;word-break:break-word}
+.task{display:flex;gap:12px;align-items:flex-start}
+.task input[type=checkbox]{width:24px;height:24px;margin-top:2px;flex:none;accent-color:var(--accent)}
+.done .tt{text-decoration:line-through;color:var(--muted)}
+.late{color:var(--danger)}
+.status{min-height:1.5em;margin:12px 0 0;font-size:14px;color:var(--muted)}
+.status.ok{color:var(--ok)}.status.err{color:var(--danger)}
+details{margin:14px 0}
+summary{color:var(--accent);font-weight:600;padding:8px 0}
+.empty{color:var(--muted);padding:24px 0}
+</style>
+</head>
+<body>
+<main>
+<header><h1>Organizar</h1><a href="./">← Cerebro</a></header>
+
+<section id="auth" hidden>
+  <p style="color:var(--muted)">Entra con tu cuenta privada.</p>
+  <label for="email">Correo</label>
+  <input id="email" type="email" autocomplete="username">
+  <label for="pass">Contraseña</label>
+  <input id="pass" type="password" autocomplete="current-password">
+  <p><button id="login">Entrar</button></p>
+  <p id="auth-status" class="status err" role="status"></p>
+</section>
+
+<section id="app" hidden>
+  <nav>
+    <button class="tab active" data-tab="tasks">Tareas</button>
+    <button class="tab" data-tab="projects">Proyectos</button>
+    <button class="tab" data-tab="decisions">Decisiones</button>
+  </nav>
+
+  <!-- TAREAS -->
+  <div id="tab-tasks">
+    <details id="task-form">
+      <summary>+ Nueva tarea</summary>
+      <label for="t-title">Tarea</label>
+      <input id="t-title" maxlength="200">
+      <label for="t-project">Proyecto</label>
+      <select id="t-project"><option value="">Sin proyecto</option></select>
+      <div class="row">
+        <div><label for="t-priority">Prioridad</label>
+          <select id="t-priority"><option value="low">Baja</option><option value="normal" selected>Normal</option><option value="high">Alta</option></select></div>
+        <div><label for="t-due">Fecha límite</label><input id="t-due" type="date"></div>
+      </div>
+      <label for="t-notes">Notas (opcional)</label>
+      <textarea id="t-notes"></textarea>
+      <p><button id="t-save">Guardar tarea</button></p>
+      <p id="t-status" class="status" role="status"></p>
+    </details>
+    <label style="display:flex;gap:8px;align-items:center;margin:8px 0">
+      <input type="checkbox" id="show-done" style="width:20px;height:20px"> Mostrar hechas</label>
+    <div id="task-list"></div>
+  </div>
+
+  <!-- PROYECTOS -->
+  <div id="tab-projects" hidden>
+    <details>
+      <summary>+ Nuevo proyecto</summary>
+      <label for="p-name">Nombre</label>
+      <input id="p-name" maxlength="200">
+      <label for="p-desc">Descripción (opcional)</label>
+      <textarea id="p-desc"></textarea>
+      <p><button id="p-save">Guardar proyecto</button></p>
+      <p id="p-status" class="status" role="status"></p>
+    </details>
+    <div id="project-list"></div>
+  </div>
+
+  <!-- DECISIONES -->
+  <div id="tab-decisions" hidden>
+    <details>
+      <summary>+ Nueva decisión</summary>
+      <label for="d-title">Título</label>
+      <input id="d-title" maxlength="200">
+      <label for="d-project">Proyecto</label>
+      <select id="d-project"><option value="">Sin proyecto</option></select>
+      <label for="d-context">Contexto (opcional)</label>
+      <textarea id="d-context"></textarea>
+      <label for="d-decision">Qué he decidido</label>
+      <textarea id="d-decision"></textarea>
+      <label for="d-why">Por qué (opcional)</label>
+      <textarea id="d-why"></textarea>
+      <label for="d-review">Revisar el (opcional)</label>
+      <input id="d-review" type="date">
+      <p><button id="d-save">Guardar decisión</button></p>
+      <p id="d-status" class="status" role="status"></p>
+    </details>
+    <div id="decision-list"></div>
+  </div>
+
+  <p style="margin-top:32px"><button class="ghost" id="logout">Salir</button></p>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.104.0/dist/umd/supabase.min.js"></script>
+<script>
+(function () {
+  var sb = window.supabase.createClient(
+    'https://tuwsaboiqwvkfqyxdbqm.supabase.co',
+    'sb_publishable_2FPUNjnPKVOXQH75CYb8DQ_KXTXBopd');
+  var $ = function (id) { return document.getElementById(id); };
+  var projects = [];
+
+  function el(tag, props, kids) {
+    var e = document.createElement(tag);
+    Object.keys(props || {}).forEach(function (k) {
+      if (k === 'text') e.textContent = props[k];
+      else if (k === 'class') e.className = props[k];
+      else if (k.slice(0, 2) === 'on') e[k] = props[k];
+      else e.setAttribute(k, props[k]);
+    });
+    (kids || []).forEach(function (c) { if (c) e.appendChild(c); });
+    return e;
+  }
+  function say(id, msg, kind) { var s = $(id); s.textContent = msg; s.className = 'status' + (kind ? ' ' + kind : ''); }
+  function fmt(d) { return d ? new Date(d).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) : ''; }
+  function today() { return new Date().toISOString().slice(0, 10); }
+  function projName(id) { var p = projects.filter(function (x) { return x.id === id; })[0]; return p ? p.name : ''; }
+  function empty(box, text) { box.replaceChildren(el('p', { class: 'empty', text: text })); }
+
+  var PRIO = { low: 'Baja', normal: 'Normal', high: 'Alta' };
+  var PSTAT = { active: 'Activo', paused: 'En pausa', completed: 'Completado', archived: 'Archivado' };
+  var DSTAT = { pending: 'Pendiente', made: 'Tomada', reversed: 'Revertida' };
+
+  // ---------- sesión
+  function showSession(session) {
+    $('auth').hidden = !!session; $('app').hidden = !session;
+    if (session) loadAll();
+  }
+  sb.auth.onAuthStateChange(function (_e, s) { showSession(s); });
+  sb.auth.getSession().then(function (r) { showSession(r.data.session); });
+  $('login').onclick = function () {
+    $('auth-status').textContent = 'Entrando…';
+    sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('pass').value })
+      .then(function (r) { $('auth-status').textContent = r.error ? 'Correo o contraseña incorrectos.' : ''; });
+  };
+  $('logout').onclick = function () { sb.auth.signOut(); };
+
+  document.querySelectorAll('.tab').forEach(function (b) {
+    b.onclick = function () {
+      document.querySelectorAll('.tab').forEach(function (x) { x.classList.toggle('active', x === b); });
+      ['tasks', 'projects', 'decisions'].forEach(function (n) { $('tab-' + n).hidden = n !== b.dataset.tab; });
+    };
+  });
+
+  function loadAll() { loadProjects().then(function () { loadTasks(); loadDecisions(); }); }
+
+  // ---------- proyectos
+  function fillSelects() {
+    ['t-project', 'd-project'].forEach(function (id) {
+      var s = $(id), v = s.value;
+      s.replaceChildren(el('option', { value: '', text: 'Sin proyecto' }));
+      projects.filter(function (p) { return p.status === 'active' || p.status === 'paused'; }).forEach(function (p) {
+        s.appendChild(el('option', { value: p.id, text: p.name }));
+      });
+      s.value = v;
+    });
+  }
+  function loadProjects() {
+    return sb.from('projects').select('id,name,description,status,created_at').order('created_at', { ascending: false })
+      .then(function (r) {
+        var box = $('project-list');
+        if (r.error) { empty(box, 'No se pudieron cargar los proyectos.'); return; }
+        projects = r.data; fillSelects();
+        if (!projects.length) { empty(box, 'Todavía no hay proyectos.'); return; }
+        box.replaceChildren();
+        projects.forEach(function (p) {
+          var sel = el('select', { 'aria-label': 'Estado del proyecto' });
+          Object.keys(PSTAT).forEach(function (k) { sel.appendChild(el('option', { value: k, text: PSTAT[k] })); });
+          sel.value = p.status;
+          sel.onchange = function () {
+            sb.from('projects').update({ status: sel.value }).eq('id', p.id).then(function (x) {
+              if (x.error) alert('No se pudo cambiar el estado.'); else loadProjects();
+            });
+          };
+          var item = el('div', { class: 'item' }, [
+            el('h3', { text: p.name }),
+            p.description ? el('p', { text: p.description }) : null,
+            el('div', { class: 'meta' }, [el('span', { text: 'Creado ' + fmt(p.created_at) })]),
+            el('div', { style: 'margin-top:10px' }, [sel]),
+            el('button', { class: 'danger', text: 'Borrar', onclick: function () {
+              if (!confirm('¿Borrar este proyecto?')) return;
+              sb.from('projects').delete().eq('id', p.id).then(function (x) {
+                if (x.error) alert('No se puede borrar: tiene tareas, decisiones o recuerdos asociados. Puedes archivarlo.');
+                else loadAll();
+              });
+            } })
+          ]);
+          box.appendChild(item);
+        });
+      });
+  }
+  $('p-save').onclick = function () {
+    var name = $('p-name').value.trim();
+    if (!name) { say('p-status', 'Pon un nombre.', 'err'); return; }
+    sb.from('projects').insert({ name: name, description: $('p-desc').value.trim() || null }).then(function (r) {
+      if (r.error) { say('p-status', 'No se pudo guardar.', 'err'); return; }
+      $('p-name').value = ''; $('p-desc').value = ''; say('p-status', 'Proyecto guardado.', 'ok'); loadProjects();
+    });
+  };
+
+  // ---------- tareas
+  $('show-done').onchange = loadTasks;
+  function loadTasks() {
+    var q = sb.from('tasks').select('id,title,notes,status,priority,due_date,project_id,completed_at').order('created_at', { ascending: false });
+    q = $('show-done').checked ? q.limit(100) : q.in('status', ['todo', 'doing']).limit(100);
+    q.then(function (r) {
+      var box = $('task-list');
+      if (r.error) { empty(box, 'No se pudieron cargar las tareas.'); return; }
+      var rank = { high: 0, normal: 1, low: 2 };
+      var rows = r.data.sort(function (a, b) {
+        var ad = a.status === 'done' ? 1 : 0, bd = b.status === 'done' ? 1 : 0;
+        if (ad !== bd) return ad - bd;
+        if (a.due_date !== b.due_date) return (a.due_date || '9999') < (b.due_date || '9999') ? -1 : 1;
+        return rank[a.priority] - rank[b.priority];
+      });
+      if (!rows.length) { empty(box, 'No tienes tareas pendientes.'); return; }
+      box.replaceChildren();
+      rows.forEach(function (t) {
+        var isDone = t.status === 'done';
+        var cb = el('input', { type: 'checkbox', 'aria-label': 'Marcar como hecha' });
+        cb.checked = isDone;
+        cb.onchange = function () {
+          sb.from('tasks').update({ status: cb.checked ? 'done' : 'todo', completed_at: cb.checked ? new Date().toISOString() : null })
+            .eq('id', t.id).then(function (x) { if (x.error) alert('No se pudo actualizar.'); loadTasks(); });
+        };
+        var late = t.due_date && !isDone && t.due_date < today();
+        var meta = el('div', { class: 'meta' }, [
+          t.project_id ? el('span', { text: projName(t.project_id) }) : null,
+          el('span', { text: 'Prioridad ' + PRIO[t.priority].toLowerCase() }),
+          t.due_date ? el('span', { class: late ? 'late' : '', text: (late ? 'Vencida · ' : 'Para el ') + fmt(t.due_date) }) : null
+        ]);
+        var body = el('div', { style: 'flex:1' }, [
+          el('div', { class: 'tt', text: t.title, style: 'font-weight:600' }),
+          meta,
+          t.notes ? el('p', { text: t.notes }) : null,
+          el('button', { class: 'danger', text: 'Borrar', onclick: function () {
+            if (!confirm('¿Borrar esta tarea?')) return;
+            sb.from('tasks').delete().eq('id', t.id).then(function (x) { if (x.error) alert('No se pudo borrar.'); loadTasks(); });
+          } })
+        ]);
+        box.appendChild(el('div', { class: 'item task' + (isDone ? ' done' : '') }, [cb, body]));
+      });
+    });
+  }
+  $('t-save').onclick = function () {
+    var title = $('t-title').value.trim();
+    if (!title) { say('t-status', 'Escribe la tarea.', 'err'); return; }
+    sb.from('tasks').insert({
+      title: title, notes: $('t-notes').value.trim() || null, priority: $('t-priority').value,
+      due_date: $('t-due').value || null, project_id: $('t-project').value || null
+    }).then(function (r) {
+      if (r.error) { say('t-status', 'No se pudo guardar.', 'err'); return; }
+      $('t-title').value = ''; $('t-notes').value = ''; $('t-due').value = '';
+      say('t-status', 'Tarea guardada.', 'ok'); loadTasks();
+    });
+  };
+
+  // ---------- decisiones
+  function loadDecisions() {
+    sb.from('decisions').select('id,title,context,decision,rationale,status,decided_at,review_date,project_id')
+      .order('decided_at', { ascending: false }).limit(100).then(function (r) {
+        var box = $('decision-list');
+        if (r.error) { empty(box, 'No se pudieron cargar las decisiones.'); return; }
+        if (!r.data.length) { empty(box, 'Todavía no has registrado decisiones.'); return; }
+        box.replaceChildren();
+        r.data.forEach(function (d) {
+          var sel = el('select', { 'aria-label': 'Estado de la decisión' });
+          Object.keys(DSTAT).forEach(function (k) { sel.appendChild(el('option', { value: k, text: DSTAT[k] })); });
+          sel.value = d.status;
+          sel.onchange = function () {
+            sb.from('decisions').update({ status: sel.value }).eq('id', d.id).then(function (x) {
+              if (x.error) alert('No se pudo cambiar el estado.');
+            });
+          };
+          box.appendChild(el('div', { class: 'item' }, [
+            el('h3', { text: d.title }),
+            el('div', { class: 'meta' }, [
+              el('span', { text: fmt(d.decided_at) }),
+              d.project_id ? el('span', { text: projName(d.project_id) }) : null,
+              d.review_date ? el('span', { text: 'Revisar el ' + fmt(d.review_date) }) : null
+            ]),
+            d.context ? el('p', { text: 'Contexto: ' + d.context }) : null,
+            el('p', { text: 'Decisión: ' + d.decision }),
+            d.rationale ? el('p', { text: 'Porque: ' + d.rationale }) : null,
+            el('div', { style: 'margin-top:10px' }, [sel]),
+            el('button', { class: 'danger', text: 'Borrar', onclick: function () {
+              if (!confirm('¿Borrar esta decisión?')) return;
+              sb.from('decisions').delete().eq('id', d.id).then(function (x) { if (x.error) alert('No se pudo borrar.'); loadDecisions(); });
+            } })
+          ]));
+        });
+      });
+  }
+  $('d-save').onclick = function () {
+    var title = $('d-title').value.trim(), decision = $('d-decision').value.trim();
+    if (!title || !decision) { say('d-status', 'Pon título y qué has decidido.', 'err'); return; }
+    sb.from('decisions').insert({
+      title: title, decision: decision, context: $('d-context').value.trim() || null,
+      rationale: $('d-why').value.trim() || null, review_date: $('d-review').value || null,
+      project_id: $('d-project').value || null
+    }).then(function (r) {
+      if (r.error) { say('d-status', 'No se pudo guardar.', 'err'); return; }
+      ['d-title', 'd-context', 'd-decision', 'd-why', 'd-review'].forEach(function (i) { $(i).value = ''; });
+      say('d-status', 'Decisión guardada.', 'ok'); loadDecisions();
+    });
+  };
+})();
+</script>
+</body>
+</html>
