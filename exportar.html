@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Exportar">
+<meta name="theme-color" content="#edf1f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1318" media="(prefers-color-scheme: dark)">
+<title>Cerebro · Exportar a Obsidian</title>
+<style>
+:root{--bg:#edf1f5;--surface:#fbfcfd;--ink:#162029;--muted:#5b6b7b;--line:#cdd6df;--accent:#0b6e8a;--on-accent:#fff;--danger:#b42318;--ok:#17703a;
+  --serif:ui-serif,"New York",Georgia,serif;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1318;--surface:#141c23;--ink:#e6edf3;--muted:#8a9aa8;--line:#26323c;--accent:#4fb3d1;--on-accent:#06222b;--danger:#f07167;--ok:#5cc48a}}
+[hidden]{display:none!important}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--sans);padding:env(safe-area-inset-top) 20px calc(40px + env(safe-area-inset-bottom))}
+main{max-width:640px;margin:0 auto}
+header{display:flex;justify-content:space-between;align-items:baseline;padding:28px 0 12px}
+h1{font:600 30px/1.1 var(--serif);margin:0}
+a{color:var(--muted);font-size:15px;text-decoration:none}
+p{color:var(--muted)}
+button{font:inherit;background:var(--accent);color:var(--on-accent);border:0;border-radius:12px;padding:14px 18px;font-weight:600;width:100%;margin-top:10px}
+button:disabled{opacity:.5}
+input{width:100%;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;margin:6px 0}
+.status{min-height:1.5em;margin:14px 0 0;font-size:15px;color:var(--muted)}
+.status.ok{color:var(--ok)}.status.err{color:var(--danger)}
+ol{color:var(--muted);padding-left:20px}
+</style>
+</head>
+<body>
+<main>
+<header><h1>Exportar</h1><a href="./">← Cerebro</a></header>
+
+<section id="auth" hidden>
+  <p>Entra con tu cuenta privada.</p>
+  <input id="email" type="email" placeholder="Correo" autocomplete="username">
+  <input id="pass" type="password" placeholder="Contraseña" autocomplete="current-password">
+  <button id="login">Entrar</button>
+  <p id="auth-status" class="status err"></p>
+</section>
+
+<section id="app" hidden>
+  <p>Crea una copia de tu Cerebro como notas de Obsidian enlazadas: proyectos, tareas, decisiones y recuerdos.</p>
+  <button id="build">1. Preparar exportación</button>
+  <button id="save" hidden>2. Guardar el archivo</button>
+  <p id="status" class="status" role="status"></p>
+  <ol>
+    <li>En "Guardar en Archivos", elige <b>En mi iPhone → Obsidian</b>.</li>
+    <li>Borra antes la carpeta <b>Cerebro</b> antigua (es solo una copia).</li>
+    <li>Toca el zip para descomprimirlo y abre Obsidian.</li>
+  </ol>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.104.0/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+(function () {
+  var sb = window.supabase.createClient('https://tuwsaboiqwvkfqyxdbqm.supabase.co', 'sb_publishable_2FPUNjnPKVOXQH75CYb8DQ_KXTXBopd');
+  var $ = function (id) { return document.getElementById(id); };
+  var blob = null;
+  function say(t, k) { $('status').textContent = t; $('status').className = 'status' + (k ? ' ' + k : ''); }
+
+  function showSession(s) { $('auth').hidden = !!s; $('app').hidden = !s; }
+  sb.auth.onAuthStateChange(function (_e, s) { showSession(s); });
+  sb.auth.getSession().then(function (r) { showSession(r.data.session); });
+  $('login').onclick = function () {
+    $('auth-status').textContent = 'Entrando…';
+    sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('pass').value })
+      .then(function (r) { $('auth-status').textContent = r.error ? 'Correo o contraseña incorrectos.' : ''; });
+  };
+
+  var STAT_T = { todo: 'pendiente', doing: 'en curso', done: 'hecha', cancelled: 'cancelada' };
+  var PRIO = { low: 'baja', normal: 'normal', high: 'alta' };
+  var STAT_P = { active: 'activo', paused: 'en pausa', completed: 'completado', archived: 'archivado' };
+  var STAT_D = { pending: 'pendiente', made: 'tomada', reversed: 'revertida' };
+
+  function safe(n) {
+    n = String(n || '').replace(/[\\\/:*?"<>|#^\[\]]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+    return n || 'Sin título';
+  }
+  function yq(v) { return v == null ? 'null' : JSON.stringify(v); }
+  function day(s) { return s ? String(s).slice(0, 10) : null; }
+
+  async function build() {
+    var r = await Promise.all([
+      sb.from('memories').select('id,title,content,category,project_id,created_at').order('created_at').limit(5000),
+      sb.from('projects').select('id,name,description,status,created_at').limit(1000),
+      sb.from('tasks').select('id,title,notes,status,priority,due_date,project_id,created_at').limit(5000),
+      sb.from('decisions').select('id,title,context,decision,rationale,status,decided_at,review_date,project_id').limit(5000),
+      sb.rpc('memory_links', { min_similarity: 0.3, per_node: 3 })
+    ]);
+    for (var i = 0; i < 4; i++) if (r[i].error) throw new Error('lectura');
+    var d = { memories: r[0].data, projects: r[1].data, tasks: r[2].data, decisions: r[3].data, links: r[4].error ? [] : (r[4].data || []) };
+
+    var used = {}, names = {};
+    function unique(t) { var b = safe(t), n = b, i = 2; while (used[n.toLowerCase()]) n = b + ' (' + (i++) + ')'; used[n.toLowerCase()] = 1; return n; }
+    d.projects.forEach(function (p) { names[p.id] = ['Proyectos', unique(p.name)]; });
+    d.memories.forEach(function (m) { names[m.id] = ['Recuerdos', unique(m.title)]; });
+    d.tasks.forEach(function (t) { names[t.id] = ['Tareas', unique(t.title)]; });
+    d.decisions.forEach(function (x) { names[x.id] = ['Decisiones', unique(x.title)]; });
+    function link(id) { return '[[' + names[id][1] + ']]'; }
+
+    var zip = new JSZip(), root = zip.folder('Cerebro');
+    function write(id, front, body) {
+      var fm = '---\n' + Object.keys(front).map(function (k) { return k + ': ' + yq(front[k]) + '\n'; }).join('') + '---\n\n';
+      root.file(names[id][0] + '/' + names[id][1] + '.md', fm + body.trim() + '\n');
+    }
+    var related = {};
+    d.links.forEach(function (l) {
+      (related[l.source] = related[l.source] || []).push([l.target, l.similarity]);
+      (related[l.target] = related[l.target] || []).push([l.source, l.similarity]);
+    });
+
+    d.memories.forEach(function (m) {
+      var b = m.content + '\n';
+      if (names[m.project_id]) b += '\nProyecto: ' + link(m.project_id) + '\n';
+      var rel = (related[m.id] || []).filter(function (x) { return names[x[0]]; }).sort(function (a, c) { return c[1] - a[1]; });
+      if (rel.length) b += '\n## Relacionado\n' + rel.map(function (x) { return '- ' + link(x[0]) + ' (' + Math.round(x[1] * 100) + ' % de parecido)\n'; }).join('');
+      write(m.id, { tipo: 'recuerdo', categoria: m.category, creado: day(m.created_at), cerebro_id: m.id }, b);
+    });
+    d.tasks.forEach(function (t) {
+      var b = (t.notes || '') + '\n';
+      if (names[t.project_id]) b += '\nProyecto: ' + link(t.project_id) + '\n';
+      write(t.id, { tipo: 'tarea', estado: STAT_T[t.status] || t.status, prioridad: PRIO[t.priority] || t.priority, fecha_limite: t.due_date, creado: day(t.created_at), cerebro_id: t.id }, b);
+    });
+    d.decisions.forEach(function (x) {
+      var b = '';
+      if (x.context) b += '## Contexto\n' + x.context + '\n\n';
+      b += '## Decisión\n' + x.decision + '\n';
+      if (x.rationale) b += '\n## Por qué\n' + x.rationale + '\n';
+      if (names[x.project_id]) b += '\nProyecto: ' + link(x.project_id) + '\n';
+      write(x.id, { tipo: 'decision', estado: STAT_D[x.status] || x.status, fecha: day(x.decided_at), revisar: x.review_date, cerebro_id: x.id }, b);
+    });
+    d.projects.forEach(function (p) {
+      var b = (p.description || '') + '\n';
+      var ts = d.tasks.filter(function (t) { return t.project_id === p.id; });
+      var ds = d.decisions.filter(function (x) { return x.project_id === p.id; });
+      var ms = d.memories.filter(function (m) { return m.project_id === p.id; });
+      if (ts.length) b += '\n## Tareas\n' + ts.map(function (t) { return '- [' + (t.status === 'done' ? 'x' : ' ') + '] ' + link(t.id) + '\n'; }).join('');
+      if (ds.length) b += '\n## Decisiones\n' + ds.map(function (x) { return '- ' + link(x.id) + '\n'; }).join('');
+      if (ms.length) b += '\n## Recuerdos\n' + ms.map(function (m) { return '- ' + link(m.id) + '\n'; }).join('');
+      write(p.id, { tipo: 'proyecto', estado: STAT_P[p.status] || p.status, creado: day(p.created_at), cerebro_id: p.id }, b);
+    });
+
+    var idx = '# Mi Cerebro\n\nCopia exportada desde mi Cerebro el ' + new Date().toLocaleString('es-ES') + '. Para cambiar algo, hazlo en Cerebro y vuelve a exportar.\n';
+    [['Proyectos', 'Proyectos'], ['Tareas', 'Tareas'], ['Decisiones', 'Decisiones'], ['Recuerdos', 'Recuerdos']].forEach(function (g) {
+      var items = Object.keys(names).filter(function (k) { return names[k][0] === g[1]; }).map(function (k) { return names[k][1]; }).sort();
+      if (items.length) idx += '\n## ' + g[0] + '\n' + items.map(function (n) { return '- [[' + n + ']]\n'; }).join('');
+    });
+    root.file('Inicio.md', idx);
+    var total = Object.keys(names).length + 1;
+    return { blob: await zip.generateAsync({ type: 'blob', mimeType: 'application/zip' }), total: total };
+  }
+
+  $('build').onclick = async function () {
+    $('build').disabled = true; $('save').hidden = true; say('Preparando…');
+    try {
+      var res = await build(); blob = res.blob;
+      say(res.total + ' notas listas. Ahora toca "Guardar el archivo".', 'ok');
+      $('save').hidden = false;
+    } catch (e) { say('No se pudo preparar la exportación. Inténtalo de nuevo.', 'err'); }
+    $('build').disabled = false;
+  };
+
+  $('save').onclick = async function () {
+    if (!blob) return;
+    var file = new File([blob], 'Cerebro-Obsidian.zip', { type: 'application/zip' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file] }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'Cerebro-Obsidian.zip';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 10000);
+  };
+})();
+</script>
+</body>
+</html>
