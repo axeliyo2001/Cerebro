@@ -12,14 +12,14 @@
 <style>
 :root{
   --bg:#edf1f5;--surface:#fbfcfd;--ink:#162029;--muted:#5b6b7b;--line:#cdd6df;
-  --accent:#0b6e8a;--on-accent:#ffffff;--danger:#b42318;
+  --accent:#0b6e8a;--on-accent:#ffffff;--danger:#b42318;--ok:#17703a;
   --serif:ui-serif,"New York",Georgia,serif;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   color-scheme:light dark;
 }
 @media (prefers-color-scheme:dark){
   :root{--bg:#0d1318;--surface:#141c23;--ink:#e6edf3;--muted:#8a9aa8;--line:#26323c;
-    --accent:#4fb3d1;--on-accent:#06222b;--danger:#f07167}
+    --accent:#4fb3d1;--on-accent:#06222b;--danger:#f07167;--ok:#5cc48a}
 }
 [hidden]{display:none!important}
 *{box-sizing:border-box}
@@ -28,19 +28,28 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--sans);
 main{max-width:640px;margin:0 auto}
 header{display:flex;justify-content:space-between;align-items:baseline;padding:28px 0 12px}
 h1{font:600 34px/1.1 var(--serif);margin:0}
-a,button.ghost{color:var(--muted);font-size:15px;background:none;border:0;padding:6px 0;text-decoration:none}
+h2{font:600 20px/1.25 var(--serif);margin:24px 0 4px}
+a,button.ghost{color:var(--muted);font-size:15px;background:none;border:0;padding:6px 0;text-decoration:none;font-weight:500}
 button{font:inherit;background:var(--accent);color:var(--on-accent);border:0;border-radius:12px;padding:12px 18px;font-weight:600}
 button:disabled{opacity:.5}
+button.secondary{background:transparent;color:var(--ink);border:1px solid var(--line)}
 label{display:block;font-size:14px;color:var(--muted);margin:14px 0 6px}
 input,textarea{width:100%;max-width:100%;font:inherit;color:var(--ink);background:var(--surface);
   border:1px solid var(--line);border-radius:12px;padding:12px}
 textarea{min-height:110px;resize:vertical}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .status{min-height:1.5em;margin:12px 0 0;font-size:14px;color:var(--muted)}
 .status.err{color:var(--danger)}
-.turn{padding:18px 0;border-bottom:1px solid var(--line)}
-.q{font:600 18px/1.35 var(--serif)}
-.a{margin-top:10px;white-space:pre-wrap;word-break:break-word}
-.used{margin-top:10px;font-size:13px;color:var(--muted)}
+.msg{padding:14px 0;border-bottom:1px solid var(--line)}
+.msg.user{font:600 18px/1.35 var(--serif)}
+.msg .a{white-space:pre-wrap;word-break:break-word}
+.used{margin-top:8px;font-size:13px;color:var(--muted)}
+.action{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin:10px 0}
+.action .k{font-size:13px;color:var(--muted)}
+.action .t{font-weight:600;margin-top:2px}
+.action .d{margin-top:6px;white-space:pre-wrap;word-break:break-word}
+.action .bar{margin-top:12px}
+.empty{color:var(--muted);font-size:14px}
 </style>
 </head>
 <body>
@@ -58,11 +67,20 @@ textarea{min-height:110px;resize:vertical}
 </section>
 
 <section id="app" hidden>
+  <div id="pending-box" hidden>
+    <h2>Propuestas para aprobar</h2>
+    <p class="empty">El cerebro no hace nada sin tu permiso. Aprueba o rechaza.</p>
+    <div id="pending"></div>
+  </div>
+
   <label for="question">Pregúntale a tu cerebro</label>
   <textarea id="question" maxlength="2000" placeholder="Ej.: ¿Qué tengo pendiente esta semana?"></textarea>
-  <p><button id="ask">Pensar</button></p>
+  <div class="bar" style="margin-top:12px">
+    <button id="ask">Pensar</button>
+    <button id="new-chat" class="secondary">Nueva conversación</button>
+  </div>
   <p id="ask-status" class="status" role="status"></p>
-  <div id="turns"></div>
+  <div id="chat"></div>
   <p style="margin-top:32px"><button class="ghost" id="logout">Salir</button></p>
 </section>
 </main>
@@ -74,8 +92,33 @@ textarea{min-height:110px;resize:vertical}
     'https://tuwsaboiqwvkfqyxdbqm.supabase.co',
     'sb_publishable_2FPUNjnPKVOXQH75CYb8DQ_KXTXBopd');
   var $ = function (id) { return document.getElementById(id); };
+  var KEY = 'cerebro.chat.session';
+  var KINDS = { create_task: 'Nueva tarea', create_project: 'Nuevo proyecto', create_decision: 'Nueva decisión', create_memory: 'Nuevo recuerdo' };
+  var PRIO = { low: 'baja', normal: 'normal', high: 'alta' };
+  var projects = {};
+  var sessionId = null;
 
-  function showSession(s) { $('auth').hidden = !!s; $('app').hidden = !s; }
+  function newId() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      var r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16);
+    });
+  }
+  function getSession() {
+    try { var s = localStorage.getItem(KEY); if (s) return s; } catch (e) {}
+    var id = newId(); try { localStorage.setItem(KEY, id); } catch (e) {}
+    return id;
+  }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function setStatus(text, err) { var s = $('ask-status'); s.textContent = text; s.className = 'status' + (err ? ' err' : ''); }
+
+  // ---------- sesión
+  var started = false;
+  function showSession(s) {
+    $('auth').hidden = !!s; $('app').hidden = !s;
+    if (s && !started) { started = true; sessionId = getSession(); loadProjects().then(function () { loadChat(); loadPending(); }); }
+    if (!s) started = false;
+  }
   sb.auth.onAuthStateChange(function (_e, s) { showSession(s); });
   sb.auth.getSession().then(function (r) { showSession(r.data.session); });
   $('login').onclick = function () {
@@ -85,7 +128,39 @@ textarea{min-height:110px;resize:vertical}
   };
   $('logout').onclick = function () { sb.auth.signOut(); };
 
-  function setStatus(text, err) { var s = $('ask-status'); s.textContent = text; s.className = 'status' + (err ? ' err' : ''); }
+  function loadProjects() {
+    return sb.from('projects').select('id,name').then(function (r) {
+      projects = {}; (r.data || []).forEach(function (p) { projects[p.id] = p.name; });
+    });
+  }
+
+  // ---------- conversación
+  function addMessage(role, text, used, top) {
+    var box = el('div', 'msg ' + role);
+    if (role === 'user') box.textContent = text;
+    else {
+      box.appendChild(el('div', 'a', text));
+      if (used) {
+        var mem = used.memories || [];
+        box.appendChild(el('div', 'used', 'Ha usado: ' +
+          (mem.length ? mem.map(function (m) { return m.title + ' (' + Math.round(m.similarity * 100) + ' %)'; }).join(', ') : 'ningún recuerdo') +
+          ' · ' + used.tasks + ' tareas · ' + used.projects + ' proyectos · ' + used.decisions + ' decisiones' +
+          (used.history ? ' · recuerda ' + used.history + ' mensajes de esta charla' : '')));
+      }
+    }
+    $('chat').appendChild(box);
+  }
+  function loadChat() {
+    $('chat').replaceChildren();
+    sb.from('chat_messages').select('role,content,created_at').eq('session_id', sessionId)
+      .order('created_at', { ascending: true }).limit(100).then(function (r) {
+        (r.data || []).forEach(function (m) { addMessage(m.role, m.content); });
+      });
+  }
+  $('new-chat').onclick = function () {
+    sessionId = newId(); try { localStorage.setItem(KEY, sessionId); } catch (e) {}
+    $('chat').replaceChildren(); setStatus('Conversación nueva. La anterior queda guardada.');
+  };
 
   async function errorText(error) {
     try { var body = await error.context.json(); if (body && body.error) return body.error; } catch (e) {}
@@ -97,25 +172,65 @@ textarea{min-height:110px;resize:vertical}
     if (!q) { setStatus('Escribe una pregunta.', true); return; }
     $('ask').disabled = true;
     setStatus('Pensando… puede tardar unos segundos.');
-    var res = await sb.functions.invoke('think', { body: { question: q } });
+    var res = await sb.functions.invoke('think', { body: { question: q, session_id: sessionId } });
     $('ask').disabled = false;
     if (res.error) { setStatus(await errorText(res.error), true); return; }
     setStatus('');
     $('question').value = '';
-
-    var d = res.data, turn = document.createElement('div');
-    turn.className = 'turn';
-    var qe = document.createElement('div'); qe.className = 'q'; qe.textContent = q;
-    var ae = document.createElement('div'); ae.className = 'a'; ae.textContent = d.answer;
-    var ue = document.createElement('div'); ue.className = 'used';
-    var mem = (d.used && d.used.memories) || [];
-    ue.textContent = 'Ha usado: ' +
-      (mem.length ? mem.map(function (m) { return m.title + ' (' + Math.round(m.similarity * 100) + ' %)'; }).join(', ') : 'ningún recuerdo') +
-      ' · ' + (d.used ? d.used.tasks : 0) + ' tareas · ' + (d.used ? d.used.projects : 0) + ' proyectos · ' +
-      (d.used ? d.used.decisions : 0) + ' decisiones';
-    turn.append(qe, ae, ue);
-    $('turns').prepend(turn);
+    addMessage('user', q);
+    addMessage('assistant', res.data.answer, res.data.used);
+    if (res.data.actions && res.data.actions.length) loadPending();
+    $('chat').lastChild.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+
+  // ---------- propuestas pendientes de aprobación
+  function loadPending() {
+    sb.from('pending_actions').select('id,kind,payload,created_at').eq('status', 'pending')
+      .order('created_at', { ascending: true }).limit(20).then(function (r) {
+        var list = r.data || [];
+        $('pending-box').hidden = !list.length;
+        $('pending').replaceChildren();
+        list.forEach(function (a) { $('pending').appendChild(actionCard(a)); });
+      });
+  }
+  function actionCard(a) {
+    var p = a.payload || {}, card = el('div', 'action');
+    var extra = [];
+    if (p.project_id && projects[p.project_id]) extra.push('Proyecto: ' + projects[p.project_id]);
+    if (a.kind === 'create_task') extra.push('Prioridad ' + (PRIO[p.priority] || 'normal'));
+    if (p.due_date) extra.push('Para el ' + new Date(p.due_date + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }));
+    card.appendChild(el('div', 'k', KINDS[a.kind] || a.kind));
+    card.appendChild(el('div', 't', p.title || ''));
+    if (p.details) card.appendChild(el('div', 'd', p.details));
+    if (extra.length) card.appendChild(el('div', 'k', extra.join(' · ')));
+    var bar = el('div', 'bar'), ok = el('button', '', 'Aprobar'), no = el('button', 'secondary', 'Rechazar');
+    bar.append(ok, no); card.appendChild(bar);
+    var msg = el('div', 'status'); card.appendChild(msg);
+    ok.onclick = function () { ok.disabled = no.disabled = true; msg.textContent = 'Guardando…'; approve(a).then(function (err) {
+      if (err) { msg.textContent = err; msg.className = 'status err'; ok.disabled = no.disabled = false; }
+      else { loadProjects().then(loadPending); }
+    }); };
+    no.onclick = function () { ok.disabled = no.disabled = true; decide(a.id, 'rejected').then(loadPending); };
+    return card;
+  }
+  function decide(id, status) {
+    return sb.from('pending_actions').update({ status: status, decided_at: new Date().toISOString() }).eq('id', id).eq('status', 'pending');
+  }
+  async function approve(a) {
+    var p = a.payload || {}, r;
+    if (a.kind === 'create_task') {
+      r = await sb.from('tasks').insert({ title: p.title, notes: p.details || null, priority: p.priority || 'normal', due_date: p.due_date || null, project_id: p.project_id || null });
+    } else if (a.kind === 'create_project') {
+      r = await sb.from('projects').insert({ name: p.title, description: p.details || null });
+    } else if (a.kind === 'create_decision') {
+      r = await sb.from('decisions').insert({ title: p.title, decision: p.details, project_id: p.project_id || null });
+    } else if (a.kind === 'create_memory') {
+      r = await sb.functions.invoke('remember', { body: { title: p.title, content: p.details, category: 'general' } });
+    } else return 'Tipo de acción desconocido.';
+    if (r.error) return 'No se pudo guardar. Inténtalo de nuevo.';
+    var d = await decide(a.id, 'approved');
+    return d.error ? 'Guardado, pero no se pudo marcar como aprobado.' : null;
+  }
 })();
 </script>
 </body>
